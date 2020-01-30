@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.room.Room
 import com.example.criminalintent.database.CrimeDatabase
-import com.example.criminalintent.database.migration1_2
 import java.util.*
 import java.util.concurrent.Executors
 
@@ -15,7 +14,7 @@ class CrimeRepository private constructor(context: Context) {
         context.applicationContext,
         CrimeDatabase::class.java,
         DATABASE_NAME
-    ).addMigrations(migration1_2).build()
+    ).build()
 
     private val crimeDao = database.crimeDao()
     private val executor = Executors.newSingleThreadExecutor()

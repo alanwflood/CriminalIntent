@@ -10,6 +10,8 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Observer
@@ -38,6 +40,7 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         crime = Crime()
+
         val crimeId: UUID =
             arguments?.getSerializable(ARG_CRIME_ID) as UUID
         Log.d(TAG, "args bundle crime id: $crimeId")
