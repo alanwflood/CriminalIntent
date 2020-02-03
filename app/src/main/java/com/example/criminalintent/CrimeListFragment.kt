@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.text.format.DateFormat
 import android.util.Log
 import android.view.*
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.fragment.app.Fragment
@@ -26,10 +27,12 @@ class CrimeListFragment : Fragment() {
     private var callbacks: Callbacks? = null
 
     private lateinit var crimeRecyclerView: RecyclerView
+    private lateinit var addCrimeButton: Button
     private var adapter: CrimeAdapter? = CrimeAdapter(emptyList())
     private val crimeListViewModel by lazy {
         ViewModelProvider.NewInstanceFactory().create(CrimeListViewModel::class.java)
     }
+
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -54,9 +57,7 @@ class CrimeListFragment : Fragment() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.new_crime -> {
-                val crime = Crime()
-                crimeListViewModel.addCrime(crime)
-                callbacks?.onCrimeSelected(crime.id)
+                createNewCrime()
                 true
             }
             else -> return super.onOptionsItemSelected(item)
@@ -72,12 +73,30 @@ class CrimeListFragment : Fragment() {
         crimeRecyclerView = view.findViewById(R.id.crime_recycler_view)
         crimeRecyclerView.layoutManager = LinearLayoutManager(context)
         crimeRecyclerView.adapter = adapter
+
+        addCrimeButton = view.findViewById(R.id.add_crime_button)
+        addCrimeButton.setOnClickListener { createNewCrime() }
+
         return view
     }
 
     private fun updateUI(crimes: List<Crime>) {
         adapter = CrimeAdapter(crimes)
-        crimeRecyclerView.adapter = adapter
+        updateListEmpty(adapter)
+    }
+
+    private fun updateListEmpty(adapter: CrimeAdapter?) {
+        if (adapter == null || adapter.itemCount == 0) {
+            crimeRecyclerView.visibility = View.GONE
+        } else {
+            crimeRecyclerView.visibility = View.VISIBLE
+        }
+    }
+
+    private fun createNewCrime() {
+        val crime = Crime()
+        crimeListViewModel.addCrime(crime)
+        callbacks?.onCrimeSelected(crime.id)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -85,10 +104,7 @@ class CrimeListFragment : Fragment() {
         crimeListViewModel.crimeListLiveData.observe(
             viewLifecycleOwner,
             Observer { crimes ->
-                crimes?.let {
-                    Log.i(TAG, "Got some Crimes yo: ${crimes.size} Crimes")
-                    updateUI(crimes)
-                }
+                updateUI(crimes)
             }
         )
     }
@@ -121,12 +137,12 @@ class CrimeListFragment : Fragment() {
         }
     }
 
-    private inner class CrimeAdapter(var crimes: List<Crime>) : ListAdapter<Crime, CrimeHolder>(DiffCallback()) {
+    private inner class CrimeAdapter(var crimes: List<Crime>) :
+        ListAdapter<Crime, CrimeHolder>(DiffCallback()) {
         override fun getItemCount(): Int = crimes.size
 
         override fun submitList(list: MutableList<Crime>?) {
             super.submitList(list)
-
 
         }
 
@@ -143,7 +159,7 @@ class CrimeListFragment : Fragment() {
         }
     }
 
-    private class DiffCallback: DiffUtil.ItemCallback<Crime>() {
+    private class DiffCallback : DiffUtil.ItemCallback<Crime>() {
         override fun areItemsTheSame(oldItem: Crime, newItem: Crime): Boolean {
             return oldItem?.id == newItem?.id
         }
