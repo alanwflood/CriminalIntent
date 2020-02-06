@@ -82,15 +82,7 @@ class CrimeListFragment : Fragment() {
 
     private fun updateUI(crimes: List<Crime>) {
         adapter = CrimeAdapter(crimes)
-        updateListEmpty(adapter)
-    }
-
-    private fun updateListEmpty(adapter: CrimeAdapter?) {
-        if (adapter == null || adapter.itemCount == 0) {
-            crimeRecyclerView.visibility = View.GONE
-        } else {
-            crimeRecyclerView.visibility = View.VISIBLE
-        }
+        crimeRecyclerView.adapter = adapter
     }
 
     private fun createNewCrime() {
@@ -104,7 +96,16 @@ class CrimeListFragment : Fragment() {
         crimeListViewModel.crimeListLiveData.observe(
             viewLifecycleOwner,
             Observer { crimes ->
-                updateUI(crimes)
+                crimes?.let {
+                    Log.i(TAG, "Got crimes ${crimes.size}")
+                    when(crimes.size) {
+                        0 -> crimeRecyclerView.visibility = View.GONE
+                        else ->  {
+                            crimeRecyclerView.visibility = View.VISIBLE
+                            updateUI(crimes.reversed())
+                        }
+                    }
+                }
             }
         )
     }
