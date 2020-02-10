@@ -7,6 +7,7 @@ import android.content.pm.ResolveInfo
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
+import android.provider.MediaStore
 import android.text.Editable
 import android.text.TextWatcher
 import android.text.format.DateFormat
@@ -14,12 +15,12 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.CheckBox
-import android.widget.EditText
+import android.widget.*
+import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Observer
+import java.io.File
 import java.util.*
 
 private const val TAG = "CrimeFragment"
@@ -32,11 +33,16 @@ private const val DIALOG_TIME = "DialogTime"
 private const val REQUEST_TIME = 0
 
 private const val REQUEST_CONTACT = 1
+private const val REQUEST_CAMERA = 2
+private const val REQUEST_PHONE = 3
 
 private const val DATE_FORMAT = "EEE, MM, dd"
 
 class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
     private lateinit var crime: Crime
+    private lateinit var photoFile: File
+    private lateinit var photoUri: Uri
+
     private lateinit var titleField: EditText
     private lateinit var dateButton: Button
     private lateinit var timeButton: Button
@@ -44,6 +50,8 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
     private lateinit var reportButton: Button
     private lateinit var suspectButton: Button
     private lateinit var callButton: Button
+    private lateinit var photoButton: ImageButton
+    private lateinit var photoView: ImageView
 
     private val crimeDetailViewModel: CrimeDetailViewModel by lazy {
         ViewModelProvider.NewInstanceFactory().create(CrimeDetailViewModel::class.java)
@@ -70,6 +78,8 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // Assign lateinit vars to items on screen
         titleField = view.findViewById(R.id.crime_title_input)
         dateButton = view.findViewById(R.id.crime_date_button)
         timeButton = view.findViewById(R.id.crime_time_button)
@@ -77,10 +87,19 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
         reportButton = view.findViewById(R.id.crime_report_button)
         suspectButton = view.findViewById(R.id.crime_suspect_button)
         callButton = view.findViewById(R.id.crime_call_button)
+        photoButton = view.findViewById(R.id.crime_camera_button)
+        photoView = view.findViewById(R.id.crime_image)
+
 
         crimeDetailViewModel.crimeLiveData.observe(viewLifecycleOwner, Observer { crime ->
             crime?.let {
                 this.crime = crime
+                photoFile = crimeDetailViewModel.getPhotoFile(crime)
+                photoUri = FileProvider.getUriForFile(
+                    requireActivity(),
+                    "com.example.criminalintent.fileprovider",
+                    photoFile
+                )
                 updateUI()
             }
         })
@@ -162,10 +181,51 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
         }
 
         callButton.apply {
-//            requireActivity().contentResolver.query(
+            //            requireActivity().contentResolver.query(
 //                contactUri,
 //                queryFields
 //            )
+            // TODO
+        }
+
+        photoButton.apply {
+            // Create image capture intent
+            val captureImageIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            // Get default apps
+            val packageManager: PackageManager = requireActivity().packageManager
+            // Is there any camera apps available for the capture intent?
+            val resolvedActivity: ResolveInfo? = packageManager.resolveActivity(
+                captureImageIntent,
+                PackageManager.MATCH_DEFAULT_ONLY
+            )
+            // If no camera app exists to handle intent
+            if (resolvedActivity == null) {
+                // Disable the button
+                isEnabled = false
+            }
+
+            setOnClickListener {
+                // Assign photoUri to intent
+                captureImageIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+                // Get available camera activities to populate list
+                val cameraActivities: List<ResolveInfo> =
+                    packageManager.queryIntentActivities(
+                        captureImageIntent,
+                        PackageManager.MATCH_DEFAULT_ONLY
+                    )
+
+                // For each activity in the possible camera activities ->
+                for (activity in cameraActivities) {
+                    // -> Grant permission to access the photoUri
+                    requireActivity().grantUriPermission(
+                        activity.activityInfo.packageName,
+                        photoUri,
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                }
+                // Run the activity
+                startActivityForResult(captureImageIntent, REQUEST_CAMERA)
+            }
         }
 
     }
@@ -195,6 +255,15 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
             callButton.visibility = View.GONE
         }
     }
+
+    private fun updatePhotoView() {
+         if (photoFile.exists()) {
+            val bitmap = getScaledBitmap(photoFile.path, requireActivity())
+            photoView.setImageBitmap(bitmap)
+        } else {
+            photoView.setImageDrawable(null)
+        }
+    })
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         when {
