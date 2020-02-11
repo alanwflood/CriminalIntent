@@ -15,6 +15,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.*
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
@@ -31,6 +32,9 @@ private const val REQUEST_DATE = 0
 
 private const val DIALOG_TIME = "DialogTime"
 private const val REQUEST_TIME = 0
+
+private const val DIALOG_PHOTO = "DialogPhoto"
+private const val REQUEST_PHOTO = 0
 
 private const val REQUEST_CONTACT = 1
 private const val REQUEST_CAMERA = 2
@@ -52,6 +56,9 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
     private lateinit var callButton: Button
     private lateinit var photoButton: ImageButton
     private lateinit var photoView: ImageView
+
+    private var photoViewWidth: Int? = null
+    private var photoViewHeight: Int? = null
 
     private val crimeDetailViewModel: CrimeDetailViewModel by lazy {
         ViewModelProvider.NewInstanceFactory().create(CrimeDetailViewModel::class.java)
@@ -90,7 +97,6 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
         photoButton = view.findViewById(R.id.crime_camera_button)
         photoView = view.findViewById(R.id.crime_image)
 
-
         crimeDetailViewModel.crimeLiveData.observe(viewLifecycleOwner, Observer { crime ->
             crime?.let {
                 this.crime = crime
@@ -103,11 +109,108 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
                 updateUI()
             }
         })
+
     }
 
     override fun onStart() {
         super.onStart()
+        applyAllEventsToViews()
+    }
 
+    override fun onStop() {
+        super.onStop()
+        crimeDetailViewModel.saveCrime(crime)
+    }
+
+    override fun onDetach() {
+        super.onDetach()
+        requireActivity().revokeUriPermission(photoUri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+    }
+
+    override fun onDateSelected(date: Date) {
+        crime.date = date
+        updateUI()
+    }
+
+    private fun updateUI() {
+        titleField.setText(crime.title)
+        dateButton.text = DateFormat.format("EEE, d MMM yyyy", crime.date)
+        timeButton.text = DateFormat.format("HH:mm", crime.date)
+        solvedCheckBox.apply {
+            isChecked = crime.isSolved
+            jumpDrawablesToCurrentState()
+        }
+        if (crime.suspect.isNotEmpty()) {
+            callButton.visibility = View.VISIBLE
+            suspectButton.text = crime.suspect
+        } else {
+            callButton.visibility = View.GONE
+        }
+
+        updatePhotoView()
+    }
+
+    private fun updatePhotoView(width: Int? = photoViewWidth, height: Int? = photoViewHeight) {
+        if (::photoFile.isInitialized) {
+            if (photoFile.exists()) {
+                if (width != null && height != null) {
+                    val bitmap =
+                        getScaledBitmap(photoFile.path, width, height)
+                    photoView.setImageBitmap(bitmap)
+                } else {
+                    val bitmap =
+                        getScaledBitmap(photoFile.path, requireActivity())
+                    photoView.setImageBitmap(bitmap)
+                }
+            } else {
+                photoView.setImageDrawable(null)
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        when {
+            resultCode != Activity.RESULT_OK -> return
+            requestCode == REQUEST_CONTACT && data != null -> {
+                setSuspectFromContact(data)
+            }
+            requestCode == REQUEST_CAMERA -> {
+                updatePhotoView()
+            }
+        }
+    }
+
+    private fun setSuspectFromContact(data: Intent) {
+        val contactUri: Uri = data.data ?: return
+        // Fields to query for values
+        val queryFields = arrayOf(
+            ContactsContract.Contacts.DISPLAY_NAME,
+            ContactsContract.Contacts._ID
+        )
+        // Perform your query - the contactUri is like a "where" clause here
+        val cursor =
+            requireActivity().contentResolver.query(
+                contactUri,
+                queryFields,
+                null,
+                null,
+                null
+            )
+
+        cursor?.use {
+            if (it.count == 0) {
+                return
+            }
+            it.moveToFirst()
+            val id = it.getString(1)
+            val suspect = it.getString(0)
+            crime.suspect = suspect
+            crimeDetailViewModel.saveCrime(crime)
+            suspectButton.text = suspect
+        }
+    }
+
+    private fun applyAllEventsToViews() {
         val titleWatcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
 
@@ -180,11 +283,37 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
             }
         }
 
+        photoView.apply {
+            // Opens Crime Photo Dialog on Click if capable
+            setOnClickListener {
+                // If there is a photo file
+                if (photoFile.exists()) {
+                    // Open the crime photo dialog
+                    CrimeDialogFragment.newInstance(photoFile.path).apply {
+                        setTargetFragment(this@CrimeFragment, REQUEST_PHOTO)
+                        show(this@CrimeFragment.requireFragmentManager(), DIALOG_PHOTO)
+                    }
+                    // Else if photo button is enabled
+                } else if (photoButton.isEnabled) {
+                    // Do whatever photo button does (Opens the Camera)
+                    photoButton.performClick()
+                }
+            }
+
+            val observer = viewTreeObserver
+            if (observer.isAlive) {
+                observer.addOnGlobalLayoutListener(object :
+                    ViewTreeObserver.OnGlobalLayoutListener {
+                    override fun onGlobalLayout() {
+                        observer.removeOnGlobalLayoutListener(this)
+                        updatePhotoView()
+                    }
+                })
+            }
+        }
+
+
         callButton.apply {
-            //            requireActivity().contentResolver.query(
-//                contactUri,
-//                queryFields
-//            )
             // TODO
         }
 
@@ -228,80 +357,6 @@ class CrimeFragment : Fragment(), DatePickerFragment.Callbacks {
             }
         }
 
-    }
-
-    override fun onStop() {
-        super.onStop()
-        crimeDetailViewModel.saveCrime(crime)
-    }
-
-    override fun onDateSelected(date: Date) {
-        crime.date = date
-        updateUI()
-    }
-
-    private fun updateUI() {
-        titleField.setText(crime.title)
-        dateButton.text = DateFormat.format("EEE, d MMM yyyy", crime.date)
-        timeButton.text = DateFormat.format("HH:mm", crime.date)
-        solvedCheckBox.apply {
-            isChecked = crime.isSolved
-            jumpDrawablesToCurrentState()
-        }
-        if (crime.suspect.isNotEmpty()) {
-            callButton.visibility = View.VISIBLE
-            suspectButton.text = crime.suspect
-        } else {
-            callButton.visibility = View.GONE
-        }
-    }
-
-    private fun updatePhotoView() {
-         if (photoFile.exists()) {
-            val bitmap = getScaledBitmap(photoFile.path, requireActivity())
-            photoView.setImageBitmap(bitmap)
-        } else {
-            photoView.setImageDrawable(null)
-        }
-    })
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        when {
-            resultCode != Activity.RESULT_OK -> return
-            requestCode == REQUEST_CONTACT && data != null -> {
-                setSuspectFromContact(data)
-            }
-        }
-    }
-
-    private fun setSuspectFromContact(data: Intent) {
-        val contactUri: Uri = data.data ?: return
-        // Fields to query for values
-        val queryFields = arrayOf(
-            ContactsContract.Contacts.DISPLAY_NAME,
-            ContactsContract.Contacts._ID
-        )
-        // Perform your query - the contactUri is like a "where" clause here
-        val cursor =
-            requireActivity().contentResolver.query(
-                contactUri,
-                queryFields,
-                null,
-                null,
-                null
-            )
-
-        cursor?.use {
-            if (it.count == 0) {
-                return
-            }
-            it.moveToFirst()
-            val id = it.getString(1)
-            val suspect = it.getString(0)
-            crime.suspect = suspect
-            crimeDetailViewModel.saveCrime(crime)
-            suspectButton.text = suspect
-        }
     }
 
     private fun getCrimeReport(): String {

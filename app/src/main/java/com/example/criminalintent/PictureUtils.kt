@@ -13,7 +13,7 @@ fun getScaledBitmap(path: String, activity: Activity): Bitmap {
     return getScaledBitmap(path, size.x, size.y)
 }
 
-fun getScaledBitmap(path: String, destWidth, destHeight): Bitmap {
+fun getScaledBitmap(path: String, destWidth: Int, destHeight: Int): Bitmap {
     var options = BitmapFactory.Options()
     options.inJustDecodeBounds = true
 
